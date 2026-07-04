@@ -308,6 +308,7 @@
         <div class="modal-inner">
             <h3> Exportar Arte</h3>
             <div class="res-options">
+                <button class="res-btn" id="btn-res-screen"><span>Vista en Pantalla</span><span class="res-tag">VIEWPORT</span></button>
                 <button class="res-btn" id="btn-res-original"><span>Tamaño Original</span><span class="res-tag">AUTO</span></button>
                 <button class="res-btn" data-w="1920" data-h="1080"><span>Full HD &nbsp; 1920 × 1080</span><span class="res-tag">2 MP</span></button>
                 <button class="res-btn" data-w="2560" data-h="1440"><span>QHD &nbsp; 2560 × 1440</span><span class="res-tag">3.7 MP</span></button>
@@ -398,9 +399,9 @@
             <input type="checkbox" id="ctrl-halftone">
         </div>
         
-        <div class="control-group" title="Grosor de los puntos o las líneas">
-            <label for="ctrl-dotsize">Grosor</label>
-            <input type="range" id="ctrl-dotsize" min="1.0" max="15.0" step="0.1">
+        <div class="control-group" title="Tamaño de los puntos o las líneas">
+            <label for="ctrl-dotsize">Tamaño</label>
+            <input type="range" id="ctrl-dotsize" min="0.5" max="15.0" step="0.1">
         </div>
         <div class="control-group" title="Ángulo de rotación del patrón (Semitono/Grabado)">
             <label for="ctrl-angle">Ángulo</label>
@@ -578,22 +579,27 @@
                 finalCol = mix(uColor3, inkColor, lineDist);
 
             } else if (uHalftone > 0.5) {
-                // LÓGICA DE HALFTONE (PUNTOS)
+                // LÓGICA DE HALFTONE PROFESIONAL (PUNTOS TIPO IMPRESIÓN)
                 float angleRad = radians(uAngle);
                 float s = sin(angleRad); 
                 float c = cos(angleRad); 
                 vec2 rotUv = vec2(gridUv.x * c - gridUv.y * s, gridUv.x * s + gridUv.y * c);
                 
-                float dots = uResolution.y / (uDotSize * 2.0); 
-                vec2 grid = fract(rotUv * dots) - 0.5;
-                float dist = length(grid);
+                // Frecuencia escalada con la resolución
+                float freq = (uResolution.y / uDotSize);
                 
-                float maxRadius = 0.75;
-                float radius = (1.0 - lum) * maxRadius; 
-
-                float dotMask = smoothstep(radius + aa, radius - aa, dist);
+                // Patrón matemático clásico de impresión CMYK/B&W
+                float pattern = cos(rotUv.x * freq) * cos(rotUv.y * freq);
+                
+                // Escala de luminancia con ligero sobremargen para blancos y negros puros
+                float threshold = lum * 2.2 - 1.1;
+                
+                // Suavizado dinámico de los bordes del punto
+                float aa_dot = 4.0 / freq; 
+                float dotMask = smoothstep(pattern - aa_dot, pattern + aa_dot, threshold);
+                
                 vec3 inkColor = mix(uColor1, uColor2, smoothstep(0.0, 0.6, lum));
-                finalCol = mix(uColor3, inkColor, dotMask);
+                finalCol = mix(inkColor, uColor3, dotMask);
 
             } else {
                 // LÓGICA CONTINUA
@@ -629,7 +635,7 @@
     const defaultConfig = {
         color1:'#2a1c11', color2:'#8b5a2b', color3:'#f4ecd8', // Set Sepia/Vintage
         contrast: 1.2, brightness: 0.0, saturation: 1.0, 
-        dotSize: 4.0, angle: 45.0, wave: 0.5,
+        dotSize: 3.0, angle: 45.0, wave: 0.5,
         halftone: false, engraved: false, antique: false, negative: false, grunge: 0.6, fitMode: false, isPanelOpen:true
     };
 
@@ -990,17 +996,33 @@
         cancelBtn.addEventListener('click', e=>{ e.stopPropagation(); modal.classList.remove('visible'); }, {capture:true});
         modal.addEventListener('click', e=>{ if(e.target===modal) modal.classList.remove('visible'); });
         
+        // Botón de tamaño original
         const btnOriginal = document.getElementById('btn-res-original');
         if (btnOriginal) {
             btnOriginal.addEventListener('click', e=>{
                 e.stopPropagation(); modal.classList.remove('visible');
                 let w = window.innerWidth * (window.devicePixelRatio || 1);
                 let h = window.innerHeight * (window.devicePixelRatio || 1);
-                if (uploadedImage) { w = uploadedImage.width; h = uploadedImage.height; }
+                if (uploadedImage) {
+                    w = uploadedImage.width;
+                    h = uploadedImage.height;
+                }
                 captureFrame(Math.floor(w), Math.floor(h), progressEl);
             }, {capture:true});
         }
 
+        // Botón de vista en pantalla (Viewport exacto)
+        const btnScreen = document.getElementById('btn-res-screen');
+        if (btnScreen) {
+            btnScreen.addEventListener('click', e=>{
+                e.stopPropagation(); modal.classList.remove('visible');
+                let w = window.innerWidth * (window.devicePixelRatio || 1);
+                let h = window.innerHeight * (window.devicePixelRatio || 1);
+                captureFrame(Math.floor(w), Math.floor(h), progressEl);
+            }, {capture:true});
+        }
+
+        // Demás resoluciones
         document.querySelectorAll('.res-btn[data-w]').forEach(btn=>{ btn.addEventListener('click', e=>{ e.stopPropagation(); modal.classList.remove('visible'); captureFrame(parseInt(btn.dataset.w), parseInt(btn.dataset.h), progressEl); }, {capture:true}); });
     }
 
